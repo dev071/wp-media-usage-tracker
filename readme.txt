@@ -1,0 +1,72 @@
+=== WP Media Usage Tracker ===
+Contributors: dev071
+Tags: media, media library, unused media, cleanup, media usage, acf, lazyblocks
+Requires at least: 5.8
+Tested up to: 6.7
+Requires PHP: 7.4
+Stable tag: 1.0.1
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+
+Complete Media Usage Tracker & Unused Media Finder for WordPress. Scans Posts, Pages, CPTs, Gutenberg Blocks, LazyBlocks, ACF/SCF Fields, Menu Items, Theme Customizer, and Options.
+
+== Description ==
+
+WP Media Usage Tracker scans your entire WordPress site to detect where every media library item is used, how many times it is used, and which media files are completely unused / orphan.
+
+= Features =
+* **Deep Scanning Engine:**
+  - Standard WordPress Posts, Pages, and all Custom Post Types.
+  - All Post Statuses: Published, Draft, Pending, Future, Private, and Trash.
+  - Featured Images (_thumbnail_id).
+  - Gutenberg Core Media Blocks (wp:image, wp:cover, wp:media-text, wp:gallery, wp:audio, wp:video, wp:file).
+  - LazyBlocks Blocks (URL-encoded JSON parsing, distinguishes between Direct Fields and Repeaters).
+  - Advanced Custom Fields (ACF) & Secure Custom Fields (SCF) post meta, repeaters, image arrays, and options pages.
+  - Navigation Menu Items (
+av_menu_item) with direct links to Menu Editor.
+  - Taxonomy Terms (Categories, Tags, Custom Taxonomies).
+  - Theme Customizer (get_theme_mods(), e.g., site logos, footer logos).
+  - Classic Editor <img> tags, wp-image-{id} classes, and [gallery] shortcodes.
+  - Inline Direct Media Links and uploads URLs.
+  - Active Theme Files (Templates like single.php, functions.php, CSS, and JS).
+* **Smart Anti-Duplication:**
+  - Accurately tracks exact usage counts without inflating numbers (e.g., Gutenberg blocks containing fallback <img> tags are counted once).
+* **Unused / Orphan Media Detection:**
+  - Instantly filters media files with 0 usages and calculates potential disk space savings.
+* **Modern WP Admin Dashboard:**
+  - KPI Stat Cards: Total Media, Used, Unused, Total Usages, and Storage Size.
+  - Real-time Instant Search (by filename, title, or ID).
+  - Filter by Usage Status (Used vs Unused).
+  - Filter by Media Type (Images, Videos, Audio, Documents, Spreadsheets, Archives).
+  - Filter by Used Location / Post Type (Pages, Posts, CPTs, Menu Items, Options).
+  - Sort by Recent, Oldest, Most Used, Least Used, Largest Size, and Title.
+  - One-click AJAX Rescan.
+  - Export to CSV.
+
+== Installation ==
+
+1. Upload the plugin zip file via **Plugins > Add New > Upload Plugin** in WordPress Admin, or extract wp-media-usage-tracker to /wp-content/plugins/.
+2. Activate the plugin through the **Plugins** menu in WordPress.
+3. Go to **Media > Media Usage** in your WordPress Admin sidebar to view the report.
+
+== Frequently Asked Questions ==
+
+= Does it delete any media files automatically? =
+No. WP Media Usage Tracker is 100% read-only and safe. It never deletes files automatically.
+
+= How do I rescan after making changes? =
+Click the  Rescan Media Library button at the top right of the Media Usage dashboard, or the scan cache will automatically invalidate when posts or media are saved.
+
+== Changelog ==
+
+= 1.0.1 =
+* Added support for Navigation Menu Items (
+av_menu_item) with SCF / ACF fields.
+* Added support for Taxonomy Term meta fields.
+* Added support for LazyBlocks blocks with distinction between direct fields and repeaters.
+* Enhanced title decoding to display clean HTML ampersands and breadcrumb symbols.
+* Optimized Gutenberg block parsing to eliminate duplicate counts from fallback <img> tags.
+* Added CSV export and interactive expand/collapse toggles.
+
+= 1.0.0 =
+* Initial release.
