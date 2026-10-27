@@ -220,6 +220,15 @@ class WMUT_Scanner {
 	public static function scan() {
 		global $wpdb;
 
+		// Ensure adequate memory and execution time for large media libraries
+		if ( function_exists( 'wp_raise_memory_limit' ) ) {
+			wp_raise_memory_limit( 'admin' );
+		}
+		@ini_set( 'memory_limit', '512M' );
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 300 );
+		}
+
 		// 1. Fetch all media attachments
 		$attachments_query = "SELECT ID, post_title, post_name, post_mime_type, post_date, post_date_gmt, post_parent, guid
 			FROM {$wpdb->posts}
@@ -560,7 +569,7 @@ class WMUT_Scanner {
 
 					// Case 3: Serialized array (ACF image array, galleries, or repeater)
 					if ( is_serialized( $meta_val ) ) {
-						$unserialized = @unserialize( $meta_val );
+						$unserialized = @unserialize( $meta_val, array( 'allowed_classes' => false ) );
 						if ( is_array( $unserialized ) ) {
 							self::scan_array_for_media_ids( $unserialized, $media_items, $post_meta_info, sprintf( __( 'Custom Field: %s', 'wp-media-usage-tracker' ), $meta_key ) );
 						}
@@ -703,7 +712,7 @@ class WMUT_Scanner {
 							}
 						}
 					} elseif ( is_serialized( $opt_val ) ) {
-						$unserialized = @unserialize( $opt_val );
+						$unserialized = @unserialize( $opt_val, array( 'allowed_classes' => false ) );
 						if ( is_array( $unserialized ) ) {
 							self::scan_array_for_media_ids( $unserialized, $media_items, $acf_opt_info, $context_label );
 						}
@@ -718,7 +727,7 @@ class WMUT_Scanner {
 					$context_label = sprintf( __( 'Site Option: %s', 'wp-media-usage-tracker' ), $opt_name );
 					self::check_string_for_media( $opt_val, $media_items, $id_by_filename, $site_options_info, $context_label );
 				} elseif ( is_serialized( $opt_val ) && 0 === strpos( $opt_name, 'widget_' ) ) {
-					$unserialized = @unserialize( $opt_val );
+					$unserialized = @unserialize( $opt_val, array( 'allowed_classes' => false ) );
 					if ( is_array( $unserialized ) ) {
 						$widget_info = array(
 							'id'           => 0,
@@ -738,6 +747,9 @@ class WMUT_Scanner {
 
 		// 8. Scan Active Theme Files (Templates, functions.php, custom templates, CSS, JS)
 		self::scan_theme_files( $media_items, $all_media_ids, $id_by_filename );
+
+		// 9. Resolve WebP and Next-Gen Derivative Usages (EWWW, W3TC, ShortPixel, etc.)
+		self::resolve_nextgen_derivative_usages( $media_items );
 
 		return self::format_result( $media_items, $target_types, $scanned_statuses );
 	}
@@ -942,6 +954,100 @@ class WMUT_Scanner {
 		}
 	}
 
+
+	/**
+	 * Resolve usages for WebP / Next-Gen converted derivative images
+	 *
+	 * When image optimization plugins (e.g., EWWW Image Optimizer, W3TC, WebP Express, Smush)
+	 * generate next-gen images (.webp, .avif), WordPress database content, block attributes,
+	 * and postmeta continue to store references to the original JPG/PNG image.
+	 * On the frontend, the optimization plugin dynamically rewrites URLs to serve the WebP version.
+	 *
+	 * This method maps usages from the original media item to its next-gen derivative copy:
+	 * 1. Via parent attachment: attachment whose post_parent points to another media item.
+	 * 2. Via filename matching:
+	 *    - EWWW append mode: image.jpg.webp -> image.jpg
+	 *    - Standard mode: image.webp -> image.jpg / image.png
+	 */
+	private static function resolve_nextgen_derivative_usages( &$media_items ) {
+		$nextgen_exts = array( 'webp' => true, 'avif' => true );
+
+		// Index original (non-nextgen) media items by base filename and full filename
+		$orig_by_basename = array();
+		$orig_by_fullname = array();
+
+		foreach ( $media_items as $att_id => $item ) {
+			$ext = strtolower( pathinfo( $item['filename'], PATHINFO_EXTENSION ) );
+			if ( ! isset( $nextgen_exts[ $ext ] ) ) {
+				$base = strtolower( pathinfo( $item['filename'], PATHINFO_FILENAME ) );
+				$orig_by_basename[ $base ][] = $att_id;
+				$orig_by_fullname[ strtolower( $item['filename'] ) ][] = $att_id;
+			}
+		}
+
+		foreach ( $media_items as $att_id => &$item ) {
+			$ext = strtolower( pathinfo( $item['filename'], PATHINFO_EXTENSION ) );
+			if ( ! isset( $nextgen_exts[ $ext ] ) ) {
+				continue;
+			}
+
+			$matched_orig_id = null;
+
+			// 1. Check parent_id pointing to another media item (standard conversion pattern)
+			if ( $item['parent_id'] > 0 && isset( $media_items[ $item['parent_id'] ] ) ) {
+				$parent_item = $media_items[ $item['parent_id'] ];
+				if ( $parent_item['usage_count'] > 0 ) {
+					$matched_orig_id = $item['parent_id'];
+				}
+			}
+
+			// 2. Check filename matches if parent not set or parent had no usages
+			if ( ! $matched_orig_id ) {
+				$fn = strtolower( $item['filename'] );
+
+				// EWWW Append Mode: e.g. banner.jpg.webp -> banner.jpg
+				if ( preg_match( '/^(.+\.(?:jpe?g|png|gif))\.(' . implode( '|', array_keys( $nextgen_exts ) ) . ')$/i', $fn, $m_app ) ) {
+					$candidate_fn = $m_app[1];
+					if ( isset( $orig_by_fullname[ $candidate_fn ] ) ) {
+						foreach ( $orig_by_fullname[ $candidate_fn ] as $oid ) {
+							if ( $media_items[ $oid ]['usage_count'] > 0 ) {
+								$matched_orig_id = $oid;
+								break;
+							}
+						}
+					}
+				}
+
+				// Standard Mode: e.g. banner.webp -> banner.jpg / banner.png
+				if ( ! $matched_orig_id ) {
+					$base = strtolower( pathinfo( $item['filename'], PATHINFO_FILENAME ) );
+					if ( isset( $orig_by_basename[ $base ] ) ) {
+						foreach ( $orig_by_basename[ $base ] as $oid ) {
+							if ( $media_items[ $oid ]['usage_count'] > 0 ) {
+								$matched_orig_id = $oid;
+								break;
+							}
+						}
+					}
+				}
+			}
+
+			// If a used original image was found, copy its usages to this WebP copy
+			if ( $matched_orig_id && isset( $media_items[ $matched_orig_id ] ) ) {
+				$orig = $media_items[ $matched_orig_id ];
+				$orig_name = ! empty( $orig['filename'] ) ? $orig['filename'] : $orig['title'];
+
+				foreach ( $orig['usages'] as $orig_usage ) {
+					$context_note = sprintf(
+						__( 'WebP Variant (Original: %s)', 'wp-media-usage-tracker' ),
+						$orig_name
+					);
+					self::record_usage( $media_items, $att_id, $orig_usage, $context_note );
+				}
+			}
+		}
+		unset( $item );
+	}
 	/**
 	 * Helper to record usage for a media item
 	 */
@@ -1146,7 +1252,7 @@ class WMUT_Scanner {
 					self::record_usage( $media_items, $cand_id, $item_info, $context );
 				}
 			} elseif ( is_serialized( $meta_val ) ) {
-				$unserialized = @unserialize( $meta_val );
+				$unserialized = @unserialize( $meta_val, array( 'allowed_classes' => false ) );
 				if ( is_array( $unserialized ) ) {
 					self::scan_array_for_media_ids( $unserialized, $media_items, $item_info, $context );
 				}
@@ -1213,7 +1319,7 @@ class WMUT_Scanner {
 					self::record_usage( $media_items, $cand_id, $term_info, $context );
 				}
 			} elseif ( is_serialized( $meta_val ) ) {
-				$unserialized = @unserialize( $meta_val );
+				$unserialized = @unserialize( $meta_val, array( 'allowed_classes' => false ) );
 				if ( is_array( $unserialized ) ) {
 					self::scan_array_for_media_ids( $unserialized, $media_items, $term_info, $context );
 				}

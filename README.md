@@ -6,7 +6,7 @@
 [![PHP Compatibility](https://img.shields.io/badge/PHP-7.4%20|%208.0%20|%208.1%20|%208.2%20|%208.3+-777bb4.svg?style=flat-square&logo=php)](https://php.net/)
 [![License: GPL v2+](https://img.shields.io/badge/License-GPL%20v2%2B-green.svg?style=flat-square)](https://www.gnu.org/licenses/gpl-2.0.html)
 [![Safety: 100% Read Only](https://img.shields.io/badge/Safety-100%25%20Read--Only-success.svg?style=flat-square)](#-100-read-only--safe-guarantee)
-[![Release](https://img.shields.io/badge/Release-v1.0.1-orange.svg?style=flat-square)](https://github.com/dev071/wp-media-usage-tracker/releases)
+[![Release](https://img.shields.io/badge/Release-v1.0.3-orange.svg?style=flat-square)](https://github.com/dev071/wp-media-usage-tracker/releases)
 
 ---
 

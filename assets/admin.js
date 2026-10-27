@@ -184,6 +184,7 @@
 			url: wmutData.ajaxUrl,
 			type: "POST",
 			dataType: "json",
+			timeout: 180000,
 			data: {
 				action: "wmut_rescan",
 				nonce: wmutData.nonce,
@@ -204,8 +205,29 @@
 					showAlert((response.data && response.data.message) || wmutData.i18n.scanError, "error");
 				}
 			})
-			.fail(function () {
-				showAlert(wmutData.i18n.scanError, "error");
+			.fail(function (jqXHR, textStatus, errorThrown) {
+				let errorMsg = wmutData.i18n.scanError;
+
+				if (jqXHR.responseJSON && jqXHR.responseJSON.data && jqXHR.responseJSON.data.message) {
+					errorMsg = jqXHR.responseJSON.data.message;
+				} else if (jqXHR.responseText) {
+					try {
+						const parsed = JSON.parse(jqXHR.responseText);
+						if (parsed && parsed.data && parsed.data.message) {
+							errorMsg = parsed.data.message;
+						}
+					} catch (e) {
+						if (jqXHR.responseText.indexOf("Allowed memory size") !== -1 || jqXHR.responseText.indexOf("memory exhausted") !== -1) {
+							errorMsg = "Server Memory Limit Exceeded: The scan ran out of allocated memory. Please increase WP_MEMORY_LIMIT in wp-config.php or contact hosting support.";
+						} else if (jqXHR.responseText.indexOf("Maximum execution time") !== -1) {
+							errorMsg = "Scan Timed Out: Server maximum execution time exceeded. Please increase max_execution_time in php.ini.";
+						}
+					}
+				} else if (textStatus === "timeout") {
+					errorMsg = "Scan Timed Out: The request took too long to complete. Please try again or check server limits.";
+				}
+
+				showAlert(errorMsg, "error");
 			})
 			.always(function () {
 				$btn.removeClass("is-loading");

@@ -87,6 +87,63 @@ class WMUT_Admin {
 			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'wp-media-usage-tracker' ) ) );
 		}
 
+		// Ensure adequate resources for large media libraries
+		if ( function_exists( 'wp_raise_memory_limit' ) ) {
+			wp_raise_memory_limit( 'admin' );
+		}
+		@ini_set( 'memory_limit', '512M' );
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 300 );
+		}
+
+		// Reserve 128KB memory buffer for graceful fatal error recovery
+		$memory_reserve = str_repeat( ' ', 1024 * 128 );
+
+		// Catch fatal memory or execution timeout errors
+		register_shutdown_function( function() use ( &$memory_reserve ) {
+			$memory_reserve = null;
+			$error = error_get_last();
+			if ( $error && in_array( $error['type'], array( E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR ), true ) ) {
+				$msg = $error['message'];
+				if ( false !== stripos( $msg, 'Allowed memory size' ) ) {
+					while ( ob_get_level() > 0 ) {
+						ob_end_clean();
+					}
+					if ( ! headers_sent() ) {
+						status_header( 500 );
+						header( 'Content-Type: application/json; charset=utf-8' );
+					}
+					echo wp_json_encode( array(
+						'success' => false,
+						'data'    => array(
+							'code'    => 'memory_exhausted',
+							'message' => sprintf(
+								__( 'Server Memory Limit Exceeded: The scan ran out of allocated memory (%s). Please increase WP_MEMORY_LIMIT in wp-config.php or contact your hosting provider.', 'wp-media-usage-tracker' ),
+								ini_get( 'memory_limit' )
+							),
+						),
+					) );
+					exit;
+				} elseif ( false !== stripos( $msg, 'Maximum execution time' ) ) {
+					while ( ob_get_level() > 0 ) {
+						ob_end_clean();
+					}
+					if ( ! headers_sent() ) {
+						status_header( 500 );
+						header( 'Content-Type: application/json; charset=utf-8' );
+					}
+					echo wp_json_encode( array(
+						'success' => false,
+						'data'    => array(
+							'code'    => 'timeout_exhausted',
+							'message' => __( 'Scan Timed Out: The server execution time limit was exceeded. Please increase max_execution_time in php.ini.', 'wp-media-usage-tracker' ),
+						),
+					) );
+					exit;
+				}
+			}
+		} );
+
 		$data = WMUT_Scanner::get_data( true );
 
 		$available_types = array();
@@ -168,26 +225,36 @@ class WMUT_Admin {
 					);
 				}
 
-				fputcsv(
-					$output,
-					array(
-						$item['id'],
-						$item['title'],
-						$item['filename'],
-						$item['mime_type'],
-						ucfirst( $item['type_group'] ),
-						$item['filesize'],
-						$item['filesize_formatted'],
-						str_replace( '&times;', 'x', $item['dimensions'] ),
-						$item['upload_date'],
-						( $item['usage_count'] > 0 ) ? 'Used' : 'Unused',
-						$item['usage_count'],
-						$item['distinct_posts'],
-						implode( ' | ', $usages_str ),
-						$item['full_url'],
-						$item['edit_url'],
-					)
+				$row = array(
+					$item['id'],
+					$item['title'],
+					$item['filename'],
+					$item['mime_type'],
+					ucfirst( $item['type_group'] ),
+					$item['filesize'],
+					$item['filesize_formatted'],
+					str_replace( '&times;', 'x', $item['dimensions'] ),
+					$item['upload_date'],
+					( $item['usage_count'] > 0 ) ? 'Used' : 'Unused',
+					$item['usage_count'],
+					$item['distinct_posts'],
+					implode( ' | ', $usages_str ),
+					$item['full_url'],
+					$item['edit_url'],
 				);
+
+				// Prevent CSV Formula Injection
+				$row = array_map(
+					function( $val ) {
+						if ( is_string( $val ) && strlen( $val ) > 0 && in_array( $val[0], array( '=', '+', '-', '@', "	", "" ), true ) ) {
+							return "'" . $val;
+						}
+						return $val;
+					},
+					$row
+				);
+
+				fputcsv( $output, $row );
 			}
 		}
 
