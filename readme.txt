@@ -4,7 +4,7 @@ Tags: media, media library, unused media, cleanup, media usage, acf, lazyblocks
 Requires at least: 5.8
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -22,8 +22,7 @@ WP Media Usage Tracker scans your entire WordPress site to detect where every me
   - Gutenberg Core Media Blocks (wp:image, wp:cover, wp:media-text, wp:gallery, wp:audio, wp:video, wp:file).
   - LazyBlocks Blocks (URL-encoded JSON parsing, distinguishes between Direct Fields and Repeaters).
   - Advanced Custom Fields (ACF) & Secure Custom Fields (SCF) post meta, repeaters, image arrays, and options pages.
-  - Navigation Menu Items (
-av_menu_item) with direct links to Menu Editor.
+  - Navigation Menu Items (nav_menu_item) with direct links to Menu Editor.
   - Taxonomy Terms (Categories, Tags, Custom Taxonomies).
   - Theme Customizer (get_theme_mods(), e.g., site logos, footer logos).
   - Classic Editor <img> tags, wp-image-{id} classes, and [gallery] shortcodes.
@@ -59,9 +58,12 @@ Click the  Rescan Media Library button at the top right of the Media Usage dashb
 
 == Changelog ==
 
+= 1.0.2 =
+* Fix: Removed false positive attachment parent check (`post_parent`) which was marking uninserted/deleted media as used.
+* Enhancement: Deep CSS and Theme scanning for `url(...)` declarations, `src`/`srcset`/`data-*` attributes, and quoted media filenames.
+
 = 1.0.1 =
-* Added support for Navigation Menu Items (
-av_menu_item) with SCF / ACF fields.
+* Added support for Navigation Menu Items (nav_menu_item) with SCF / ACF fields.
 * Added support for Taxonomy Term meta fields.
 * Added support for LazyBlocks blocks with distinction between direct fields and repeaters.
 * Enhanced title decoding to display clean HTML ampersands and breadcrumb symbols.

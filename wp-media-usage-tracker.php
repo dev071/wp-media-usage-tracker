@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WP Media Usage Tracker
  * Description: Scans all media items across Posts, Pages, and CPTs (Published, Draft, Trashed & more) to track usage counts, locations, and find unused files.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: dev071
  * Author URI: https://github.com/dev071
  * Plugin URI: https://github.com/dev071/wp-media-usage-tracker
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'WMUT_VERSION', '1.0.1' );
+define( 'WMUT_VERSION', '1.0.2' );
 define( 'WMUT_FILE', __FILE__ );
 define( 'WMUT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'WMUT_URL', plugin_dir_url( __FILE__ ) );

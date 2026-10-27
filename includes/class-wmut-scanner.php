@@ -736,24 +736,7 @@ class WMUT_Scanner {
 			}
 		}
 
-		// 8. Check Attachment Parent (Uploaded directly to post)
-		foreach ( $media_items as $att_id => $item ) {
-			if ( $item['parent_id'] > 0 && isset( $posts_map[ $item['parent_id'] ] ) ) {
-				$parent_post = $posts_map[ $item['parent_id'] ];
-				$already_in_parent = false;
-				foreach ( $item['usages'] as $usage ) {
-					if ( $usage['id'] === $item['parent_id'] ) {
-						$already_in_parent = true;
-						break;
-					}
-				}
-				if ( ! $already_in_parent ) {
-					self::record_usage( $media_items, $att_id, $parent_post, __( 'Attached to Post (Parent)', 'wp-media-usage-tracker' ) );
-				}
-			}
-		}
-
-		// 9. Scan Active Theme Files (Templates, functions.php, custom templates, CSS, JS)
+		// 8. Scan Active Theme Files (Templates, functions.php, custom templates, CSS, JS)
 		self::scan_theme_files( $media_items, $all_media_ids, $id_by_filename );
 
 		return self::format_result( $media_items, $target_types, $scanned_statuses );
@@ -842,7 +825,87 @@ class WMUT_Scanner {
 
 				$context = sprintf( __( 'Theme File: %s', 'wp-media-usage-tracker' ), $rel_file );
 
-				// 1. Scan for upload URLs (/wp-content/uploads/...)
+				// 1. Scan for CSS / style url(...) references (e.g. background-image: url(../images/banner-1.jpg))
+				if ( preg_match_all( '/url\s*\(\s*[\'"]?([^\'")]+)[\'"]?\s*\)/i', $content, $url_matches ) ) {
+					foreach ( $url_matches[1] as $raw_url ) {
+						$clean_url = trim( $raw_url );
+						$clean_url = preg_replace( '/[\?#].*$/', '', $clean_url );
+						$found_basename = strtolower( basename( $clean_url ) );
+						if ( empty( $found_basename ) ) {
+							continue;
+						}
+
+						if ( isset( $id_by_filename[ $found_basename ] ) ) {
+							foreach ( $id_by_filename[ $found_basename ] as $matched_id ) {
+								self::record_usage( $media_items, $matched_id, $theme_file_info, $context );
+							}
+							continue;
+						}
+
+						$stripped = preg_replace( '/-(\d+)x(\d+)(\.[a-zA-Z0-9]+)$/', '$3', $found_basename );
+						if ( isset( $id_by_filename[ $stripped ] ) ) {
+							foreach ( $id_by_filename[ $stripped ] as $matched_id ) {
+								self::record_usage( $media_items, $matched_id, $theme_file_info, $context );
+							}
+						}
+					}
+				}
+
+				// 2. Scan for HTML / template image attributes (src, data-src, data-bg, srcset)
+				if ( preg_match_all( '/(?:src|data-src|data-bg|srcset)\s*=\s*[\'"]([^\'"]+)[\'"]/i', $content, $attr_matches ) ) {
+					foreach ( $attr_matches[1] as $raw_val ) {
+						$parts = explode( ',', $raw_val );
+						foreach ( $parts as $part ) {
+							$url_part = preg_split( '/\s+/', trim( $part ) )[0];
+							$clean_url = preg_replace( '/[\?#].*$/', '', $url_part );
+							$found_basename = strtolower( basename( $clean_url ) );
+							if ( empty( $found_basename ) ) {
+								continue;
+							}
+
+							if ( isset( $id_by_filename[ $found_basename ] ) ) {
+								foreach ( $id_by_filename[ $found_basename ] as $matched_id ) {
+									self::record_usage( $media_items, $matched_id, $theme_file_info, $context );
+								}
+								continue;
+							}
+
+							$stripped = preg_replace( '/-(\d+)x(\d+)(\.[a-zA-Z0-9]+)$/', '$3', $found_basename );
+							if ( isset( $id_by_filename[ $stripped ] ) ) {
+								foreach ( $id_by_filename[ $stripped ] as $matched_id ) {
+									self::record_usage( $media_items, $matched_id, $theme_file_info, $context );
+								}
+							}
+						}
+					}
+				}
+
+				// 3. Scan for quoted strings ending in media extensions (JS, PHP variables, inline configs)
+				if ( preg_match_all( '/[\'"]([^\'"\r\n]+\.(?:jpe?g|png|gif|webp|svg|pdf|mp4|webm))[\'"]/i', $content, $q_matches ) ) {
+					foreach ( $q_matches[1] as $raw_q ) {
+						$clean_url = preg_replace( '/[\?#].*$/', '', trim( $raw_q ) );
+						$found_basename = strtolower( basename( $clean_url ) );
+						if ( empty( $found_basename ) ) {
+							continue;
+						}
+
+						if ( isset( $id_by_filename[ $found_basename ] ) ) {
+							foreach ( $id_by_filename[ $found_basename ] as $matched_id ) {
+								self::record_usage( $media_items, $matched_id, $theme_file_info, $context );
+							}
+							continue;
+						}
+
+						$stripped = preg_replace( '/-(\d+)x(\d+)(\.[a-zA-Z0-9]+)$/', '$3', $found_basename );
+						if ( isset( $id_by_filename[ $stripped ] ) ) {
+							foreach ( $id_by_filename[ $stripped ] as $matched_id ) {
+								self::record_usage( $media_items, $matched_id, $theme_file_info, $context );
+							}
+						}
+					}
+				}
+
+				// 4. Scan for upload URLs (/wp-content/uploads/...)
 				if ( strpos( $content, '/wp-content/uploads/' ) !== false ) {
 					if ( preg_match_all( '/\/wp-content\/uploads\/([0-9]{4}\/[0-9]{2}\/)?([a-zA-Z0-9_\-\.\%]+)/i', $content, $matches ) ) {
 						foreach ( $matches[2] as $found_file ) {
@@ -864,7 +927,7 @@ class WMUT_Scanner {
 					}
 				}
 
-				// 2. Scan for direct PHP attachment functions referencing IDs
+				// 5. Scan for direct PHP attachment functions referencing IDs
 				if ( 'php' === $ext && preg_match_all( '/\b(wp_get_attachment_image|wp_get_attachment_url|wp_get_attachment_image_url|wp_get_attachment_image_src|image_render)\s*\(\s*(\d+)/i', $content, $fn_matches ) ) {
 					foreach ( $fn_matches[2] as $idx => $cand_id ) {
 						$cand_id = (int) $cand_id;
